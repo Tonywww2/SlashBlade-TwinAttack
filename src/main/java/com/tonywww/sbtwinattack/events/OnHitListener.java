@@ -1,6 +1,7 @@
 package com.tonywww.sbtwinattack.events;
 
 import com.google.common.util.concurrent.AtomicDouble;
+import com.tonywww.sbtwinattack.SBTwinAttack;
 import mods.flammpfeil.slashblade.event.SlashBladeEvent;
 import mods.flammpfeil.slashblade.item.ItemSlashBlade;
 import net.minecraft.server.level.ServerPlayer;
@@ -20,6 +21,7 @@ import net.minecraft.world.InteractionHand;
 import java.util.HashSet;
 
 import static com.tonywww.sbtwinattack.SBTwinConfig.*;
+import static com.tonywww.sbtwinattack.tags.ModTags.Items.TWIN_ATTACK_BLACKLIST;
 
 @Mod.EventBusSubscriber
 public class OnHitListener {
@@ -39,10 +41,10 @@ public class OnHitListener {
         LivingEntity target = event.getTarget();
         if (event.getUser() instanceof ServerPlayer player) {
             ItemStack stack = player.getOffhandItem();
-            ItemStack slashblade = player.getMainHandItem();
+//            ItemStack slashblade = player.getMainHandItem();
 
             if (stack != null && !stack.isEmpty() &&
-                    !(stack.getItem() instanceof ItemSlashBlade) &&
+                    !(stack.is(TWIN_ATTACK_BLACKLIST)) &&
                     !player.getCooldowns().isOnCooldown(stack.getItem())) {
                 // 获取伤害
                 AtomicDouble damage = new AtomicDouble(1);
@@ -65,10 +67,16 @@ public class OnHitListener {
 
                 finalAtkSpeed = (18.0D * twinAttackCDConstant.get() / finalAtkSpeed) + 2.0D;
 
-//                SBTwinAttack.LOGGER.debug("d1: " + damage.get());
-//                SBTwinAttack.LOGGER.debug("d2: " + finalDamage);
-//                SBTwinAttack.LOGGER.debug("speed: " + atkSpeed.get());
-//                SBTwinAttack.LOGGER.debug("cd: " + finalAtkSpeed);
+                if (debugInfo.get()) {
+                    SBTwinAttack.LOGGER.debug("attacker uuid: {},\n raw damage: {},\n final damage: {},\n attack speed: {},\n final cd: {},\n target: {},\n target uuid: {}",
+                            player.getStringUUID(),
+                            damage.get(),
+                            finalDamage,
+                            atkSpeed.get(),
+                            finalAtkSpeed,
+                            target,
+                            target.getStringUUID());
+                }
 
                 target.invulnerableTime = 0;
                 target.hurt(player.damageSources().playerAttack(player), (float) (finalDamage * twinAttackDamageMultiplier.get()));

@@ -12,6 +12,8 @@ public class SBTwinConfig {
     public static final ForgeConfigSpec.ConfigValue<Double> twinAttackCDConstant;
     public static final ForgeConfigSpec.ConfigValue<Double> twinAttackCDMultiplier;
 
+    public static final ForgeConfigSpec.ConfigValue<Boolean> debugInfo;
+
     static {
         BUILDER.comment("Config for SlashBlade Twin Attack").push("SlashBlade Twin Attack");
 
@@ -22,6 +24,9 @@ public class SBTwinConfig {
                 .defineInRange("twinAttackCDConstant", 1.5d, 0.0d, 512.0d);
         twinAttackCDMultiplier = BUILDER.comment("\nThe cooldown multiplier of the twin attack. Range[0, 512] Default: 1.0")
                 .defineInRange("twinAttackCDMultiplier", 1.0d, 0.0d, 512.0d);
+
+        debugInfo = BUILDER.comment("\nEnable debug information or not.")
+                        .define("debugInfo", false);
 
         BUILDER.pop();
         COMMON_CONFIG = BUILDER.build();
