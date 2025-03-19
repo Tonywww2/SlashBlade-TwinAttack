@@ -81,11 +81,11 @@ public class OnHitListener {
                 target.invulnerableTime = 0;
                 target.hurt(player.damageSources().playerAttack(player), (float) (finalDamage * twinAttackDamageMultiplier.get()));
 
+                // 特效
                 fillPlayerAttackerStrengthTicker(player);
                 player.swinging = false;
                 player.swing(InteractionHand.OFF_HAND, true);
-
-                // 特效
+                player.swingTime = 0;
                 stack.getItem().onLeftClickEntity(stack, player, target);
                 player.getCooldowns().addCooldown(stack.getItem(), (int) Math.max(2, finalAtkSpeed * twinAttackCDMultiplier.get()));
 
