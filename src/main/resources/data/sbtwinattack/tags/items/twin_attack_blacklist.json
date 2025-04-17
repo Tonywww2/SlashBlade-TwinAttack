@@ -5,6 +5,10 @@
     "slashblade:slashblade_bamboo",
     "slashblade:slashblade_silverbamboo",
     "slashblade:slashblade_white",
-    "slashblade:slashblade_wood"
+    "slashblade:slashblade_wood",
+    {
+      "id": "ticex:reforged_slashblade",
+      "required": false
+    }
   ]
 }
