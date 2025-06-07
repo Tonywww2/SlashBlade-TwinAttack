@@ -39,59 +39,64 @@ public class OnHitListener {
     public static void onHitEvent(SlashBladeEvent.HitEvent event) {
         // 在这里处理事件
         LivingEntity target = event.getTarget();
+        if (target == null) return;
         if (event.getUser() instanceof ServerPlayer player) {
+            if (player == null) return;
             ItemStack stack = player.getOffhandItem();
 //            ItemStack slashblade = player.getMainHandItem();
 
-            if (stack != null && !stack.isEmpty() &&
-                    !(stack.is(TWIN_ATTACK_BLACKLIST)) &&
-                    !player.getCooldowns().isOnCooldown(stack.getItem())) {
-                // 获取伤害
-                AtomicDouble damage = new AtomicDouble(1);
-                AtomicDouble atkSpeed = new AtomicDouble(4);
+            if (stack == null && stack.isEmpty()) return;
+            if (stack.is(TWIN_ATTACK_BLACKLIST)) return;
+            if (player.getCooldowns().isOnCooldown(stack.getItem())) return;
 
-                stack.getAttributeModifiers(EquipmentSlot.MAINHAND).forEach((k, v) -> {
-                    if (k == Attributes.ATTACK_DAMAGE) {
-                        if (v.getOperation() == Operation.ADDITION) {
-                            damage.addAndGet(v.getAmount());
-                        }
-                    } else if (k == Attributes.ATTACK_SPEED) {
-                        if (v.getOperation() == Operation.ADDITION) {
-                            atkSpeed.addAndGet(v.getAmount());
-                        }
+            // 获取伤害
+            AtomicDouble damage = new AtomicDouble(1);
+            AtomicDouble atkSpeed = new AtomicDouble(4);
+
+            stack.getAttributeModifiers(EquipmentSlot.MAINHAND).forEach((k, v) -> {
+                if (k == Attributes.ATTACK_DAMAGE) {
+                    if (v.getOperation() == Operation.ADDITION) {
+                        damage.addAndGet(v.getAmount());
                     }
-                });
-
-                double finalDamage = getAttributeScale(player.getAttribute(Attributes.ATTACK_DAMAGE), damage.get());
-                double finalAtkSpeed = getAttributeScale(player.getAttribute(Attributes.ATTACK_SPEED), atkSpeed.get());
-
-                finalAtkSpeed = (18.0D * twinAttackCDConstant.get() / finalAtkSpeed) + 2.0D;
-
-                if (debugInfo.get()) {
-                    SBTwinAttack.LOGGER.debug("attacker uuid: {},\n raw damage: {},\n final damage: {},\n attack speed: {},\n final cd: {},\n target: {},\n target uuid: {}",
-                            player.getStringUUID(),
-                            damage.get(),
-                            finalDamage,
-                            atkSpeed.get(),
-                            finalAtkSpeed,
-                            target,
-                            target.getStringUUID());
+                } else if (k == Attributes.ATTACK_SPEED) {
+                    if (v.getOperation() == Operation.ADDITION) {
+                        atkSpeed.addAndGet(v.getAmount());
+                    }
                 }
+            });
 
-                target.invulnerableTime = 0;
-                target.hurt(player.damageSources().playerAttack(player), (float) (finalDamage * twinAttackDamageMultiplier.get()));
+            double finalDamage = getAttributeScale(player.getAttribute(Attributes.ATTACK_DAMAGE), damage.get());
+            double finalAtkSpeed = getAttributeScale(player.getAttribute(Attributes.ATTACK_SPEED), atkSpeed.get());
 
-                // 特效
-                fillPlayerAttackerStrengthTicker(player);
-                player.swinging = false;
-                player.swing(InteractionHand.OFF_HAND, true);
-                player.swingTime = 0;
-                stack.getItem().onLeftClickEntity(stack, player, target);
-                player.getCooldowns().addCooldown(stack.getItem(), (int) Math.max(2, finalAtkSpeed * twinAttackCDMultiplier.get()));
+            finalAtkSpeed = (18.0D * twinAttackCDConstant.get() / finalAtkSpeed) + 2.0D;
 
-                player.serverLevel().playSound(null, player.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.BLOCKS, 1f, 1f);
-
+            if (debugInfo.get()) {
+                SBTwinAttack.LOGGER.debug("attacker uuid: {},\n raw damage: {},\n final damage: {},\n attack speed: {},\n final cd: {},\n target: {},\n target uuid: {}",
+                        player.getStringUUID(),
+                        damage.get(),
+                        finalDamage,
+                        atkSpeed.get(),
+                        finalAtkSpeed,
+                        target,
+                        target.getStringUUID());
             }
+
+            target.invulnerableTime = 0;
+            target.hurt(player.damageSources().playerAttack(player), (float) (finalDamage * twinAttackDamageMultiplier.get()));
+
+            // 特效
+            fillPlayerAttackerStrengthTicker(player);
+
+            player.swinging = false;
+            player.swingTime = 0;
+            player.swing(InteractionHand.OFF_HAND, true);
+
+            stack.getItem().onLeftClickEntity(stack, player, target);
+            player.getCooldowns().addCooldown(stack.getItem(), (int) Math.max(2, finalAtkSpeed * twinAttackCDMultiplier.get()));
+
+            player.serverLevel().playSound(null, player.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.BLOCKS, 1f, 1f);
+
+
         }
     }
 
@@ -115,13 +120,17 @@ public class OnHitListener {
         return finalDamage;
     }
 
-    private static void fillPlayerAttackerStrengthTicker(ServerPlayer player) {
+    private static boolean fillPlayerAttackerStrengthTicker(ServerPlayer player) {
         try {
             java.lang.reflect.Field field = LivingEntity.class.getDeclaredField("attackStrengthTicker");
             field.setAccessible(true);
             field.set(player, 100);
         } catch (NoSuchFieldException | IllegalAccessException e) {
-            e.printStackTrace();
+            if (debugInfo.get()) e.printStackTrace();
+            return false;
+        } finally {
+
         }
+        return true;
     }
 }
