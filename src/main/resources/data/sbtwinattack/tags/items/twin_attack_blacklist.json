@@ -9,6 +9,14 @@
     {
       "id": "ticex:reforged_slashblade",
       "required": false
+    },
+    {
+      "id": "slashbladetetra:slashblade",
+      "required": false
+    },
+    {
+      "id": "srelic:srelic_slashblade",
+      "required": false
     }
   ]
 }
