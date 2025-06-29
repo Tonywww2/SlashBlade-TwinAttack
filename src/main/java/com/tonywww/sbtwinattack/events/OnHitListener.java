@@ -2,25 +2,25 @@ package com.tonywww.sbtwinattack.events;
 
 import com.google.common.util.concurrent.AtomicDouble;
 import com.tonywww.sbtwinattack.SBTwinAttack;
-import mods.flammpfeil.slashblade.SlashBladeConfig;
 import mods.flammpfeil.slashblade.event.SlashBladeEvent;
-import mods.flammpfeil.slashblade.util.AttackManager;
 import mods.flammpfeil.slashblade.util.PlayerAttackHelper;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.AttributeInstance;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.minecraftforge.common.ForgeHooks;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.entity.player.AttackEntityEvent;
 import net.minecraftforge.event.entity.player.CriticalHitEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraft.world.entity.ai.attributes.Attributes;
-import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.ai.attributes.AttributeModifier.Operation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.InteractionHand;
@@ -55,48 +55,40 @@ public class OnHitListener {
             if (offhandItem.isEmpty() || offhandItem.is(TWIN_ATTACK_BLACKLIST) || player.getCooldowns().isOnCooldown(offhandItem.getItem()))
                 return;
 
-            // 获取伤害
-//            AtomicDouble damage = new AtomicDouble(1);
-            AtomicDouble atkSpeed = new AtomicDouble(4);
-
-//            offhandItem.getAttributeModifiers(EquipmentSlot.MAINHAND).forEach((k, v) -> {
-//                if (k == Attributes.ATTACK_DAMAGE) {
-//                    if (v.getOperation() == Operation.ADDITION) {
-//                        damage.addAndGet(v.getAmount());
-//                    }
-//                } else if (k == Attributes.ATTACK_SPEED) {
-//                    if (v.getOperation() == Operation.ADDITION) {
-//                        atkSpeed.addAndGet(v.getAmount());
-//                    }
-//                }
-//            });
-
             swapHands(player);
 
-//            double finalDamage = getAttributeScale(Objects.requireNonNull(player.getAttribute(Attributes.ATTACK_DAMAGE)), damage.get());
-//            double finalAtkSpeed = getAttributeScale(Objects.requireNonNull(player.getAttribute(Attributes.ATTACK_SPEED)), atkSpeed.get());
+            AtomicDouble baseAtkSpeed = new AtomicDouble(4);
+            AtomicDouble baseDamage = new AtomicDouble(1);
 
 
-            double finalDamage = Objects.requireNonNull(player.getAttribute(Attributes.ATTACK_DAMAGE)).getValue();
-            double finalAtkSpeed = Objects.requireNonNull(player.getAttribute(Attributes.ATTACK_SPEED)).getValue();
-
-            finalAtkSpeed = (18.0D * twinAttackCDConstant.get() / finalAtkSpeed) + 2.0D;
+            offhandItem.getAttributeModifiers(EquipmentSlot.MAINHAND).forEach((k, v) -> {
+                if (k == Attributes.ATTACK_SPEED) {
+                    if (v.getOperation() == Operation.ADDITION) {
+                        baseAtkSpeed.addAndGet(v.getAmount());
+                    }
+                } else if (k == Attributes.ATTACK_DAMAGE) {
+                    if (v.getOperation() == Operation.ADDITION) {
+                        baseDamage.addAndGet(v.getAmount());
+                    }
+                }
+            });
+            double finalAtkSpeed = getAttributeScale(Objects.requireNonNull(player.getAttribute(Attributes.ATTACK_SPEED)), baseAtkSpeed.get());
+            double finalAtkDamage = getAttributeScale(Objects.requireNonNull(player.getAttribute(Attributes.ATTACK_DAMAGE)), baseDamage.get());
+            double cd = (18.0D * twinAttackCDConstant.get() / finalAtkSpeed) + 2.0D;
 
             if (debugInfo.get()) {
-                SBTwinAttack.LOGGER.debug("attacker uuid: {},\n raw damage: {},\n final damage: {},\n attack speed: {},\n final cd: {},\n target: {},\n target uuid: {}",
+                SBTwinAttack.LOGGER.info("attacker uuid: {},\n raw damage: {},\n attack speed: {},\n final cd: {},\n target: {},\n target uuid: {}",
                         player.getStringUUID(),
-                        Objects.requireNonNull(player.getAttribute(Attributes.ATTACK_DAMAGE)).getBaseValue(),
-                        finalDamage,
-                        atkSpeed.get(),
+                        baseDamage,
                         finalAtkSpeed,
+                        cd,
                         target,
                         target.getStringUUID());
             }
 
-
             // 攻击
             fillPlayerAttackerStrengthTicker(player);
-            attack(player, target, finalDamage * twinAttackDamageMultiplier.get());
+            attack(player, target, offhandItem, finalAtkDamage * twinAttackDamageMultiplier.get());
 
             swapHands(player);
 
@@ -104,35 +96,32 @@ public class OnHitListener {
             player.swingTime = 0;
             player.swing(InteractionHand.OFF_HAND, true);
 
-            player.getCooldowns().addCooldown(offhandItem.getItem(), (int) Math.max(2, finalAtkSpeed * twinAttackCDMultiplier.get()));
+            player.getCooldowns().addCooldown(offhandItem.getItem(), (int) Math.max(1, cd * twinAttackCDMultiplier.get()));
 
             player.serverLevel().playSound(null, player.blockPosition(), SoundEvents.PLAYER_ATTACK_SWEEP, SoundSource.BLOCKS, 1f, 1f);
 
         }
     }
 
-    public static void attack(Player attacker, Entity target, double baseDamage) {
-        target.invulnerableTime = 0;
-        if (ForgeHooks.onPlayerAttackTarget(attacker, target)) {
-            if (target.isAttackable() && !target.skipAttackInteraction(attacker)) {
-                baseDamage += getSweepingBonus(attacker);
-                baseDamage += getEnchantmentBonus(attacker, target);
-
-                boolean isCritical = isCriticalHit(attacker, target);
-                CriticalHitEvent hitResult = ForgeHooks.getCriticalHit(attacker, target, isCritical, isCritical ? 1.5F : 1.0F);
-                isCritical = hitResult != null;
-                if (isCritical) {
-                    baseDamage *= hitResult.getDamageModifier();
-                }
+    public static void attack(Player attacker, LivingEntity target, ItemStack offhandItem, double damage) {
+        MinecraftForge.EVENT_BUS.post(new AttackEntityEvent(attacker, target));
+        boolean eventResult = !offhandItem.getItem().onLeftClickEntity(offhandItem, attacker, target);
+        if (!checkAttackEventResult.get() || eventResult) {
+            if (checkIsAttackable.get() || (target.isAttackable() && !target.skipAttackInteraction(attacker))) {
+                damage += getSweepingBonus(attacker);
+                damage += getEnchantmentBonus(attacker, target);
 
                 PlayerAttackHelper.FireAspectResult fireAspectResult = handleFireAspect(attacker, target);
                 Vec3 originalMotion = target.getDeltaMovement();
-                boolean damageSuccess = target.hurt(attacker.damageSources().playerAttack(attacker), (float) baseDamage);
+                target.invulnerableTime = 0;
+                if (debugInfo.get()) {
+                    SBTwinAttack.LOGGER.info("Final Damage: {}", damage);
+                }
+                boolean damageSuccess = target.hurt(attacker.damageSources().playerAttack(attacker), (float) damage);
                 if (damageSuccess) {
                     restoreTargetMotionIfNeeded(target, originalMotion);
-                    playAttackEffects(attacker, target, isCritical);
-                    handleEnchantmentsAndDurability(attacker, target);
-                    handlePostAttackEffects(attacker, target, fireAspectResult, isCritical);
+                    if (consumeDurability.get()) handleEnchantmentsAndDurability(attacker, target);
+                    handlePostAttackEffects(attacker, target, fireAspectResult, false);
                 } else {
                     handleFailedAttack(attacker, target, fireAspectResult);
                 }
@@ -154,23 +143,23 @@ public class OnHitListener {
                 base += i.getAmount();
             }
         }
-        double finalDamage = base;
+        double finalAmmount = base;
         for (AttributeModifier i : attackAttribute.getModifiers(Operation.MULTIPLY_BASE)) {
             if (!blackList.contains(i.getName())) {
-                finalDamage += base * i.getAmount();
+                finalAmmount += base * i.getAmount();
             }
         }
         for (AttributeModifier i : attackAttribute.getModifiers(Operation.MULTIPLY_TOTAL)) {
             if (!blackList.contains(i.getName())) {
-                finalDamage *= 1.0D + i.getAmount();
+                finalAmmount *= 1.0D + i.getAmount();
             }
         }
-        return finalDamage;
+        return finalAmmount;
     }
 
     private static void fillPlayerAttackerStrengthTicker(ServerPlayer player) {
         try {
-            java.lang.reflect.Field field = LivingEntity.class.getDeclaredField("attackStrengthTicker");
+            java.lang.reflect.Field field = LivingEntity.class.getDeclaredField("f_20922_");
             field.setAccessible(true);
             field.set(player, 100);
         } catch (NoSuchFieldException | IllegalAccessException e) {
